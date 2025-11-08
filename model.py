@@ -1,41 +1,55 @@
-# model.py
-
 import torch
 import torch.nn as nn
+from torchvision.models import mobilenet_v2
+from torchvision.models.mobilenetv2 import ConvBNActivation
 
-class SimpleCNN(nn.Module):
-    def __init__(self, in_channels=1, num_classes=10):
-        super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, 6, kernel_size=5, stride=1, padding=2)   # 28x28 → 28x28
-        self.pool = nn.AvgPool2d(2)                                                  # 28x28 → 14x14
-        self.conv2 = nn.Conv2d(6, 16, kernel_size=5)                                 # 14x14 → 10x10
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)                                        # 10x10 → 5x5 setelah pool
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 1 if num_classes == 2 else num_classes)
-
+class CustomMobileNetV2(nn.Module):
+    def __init__(self, in_channels=1, num_classes=1):
+        super(CustomMobileNetV2, self).__init__()
+        
+        # Load pretrained MobileNetV2
+        self.model = mobilenet_v2(pretrained=True)
+        
+        # Modify first convolution layer to accept grayscale input
+        self.model.features[0][0] = ConvBNActivation(
+            in_channels,  # Changed from 3 to 1 for grayscale
+            32,
+            kernel_size=3,
+            stride=2,
+            groups=1,
+            norm_layer=nn.BatchNorm2d,
+            activation_layer=nn.ReLU6
+        )
+        
+        # Modify classifier for binary classification
+        self.model.classifier = nn.Sequential(
+            nn.Dropout(p=0.2),
+            nn.Linear(self.model.last_channel, num_classes)
+        )
+        
+        # Initialize the new layers
+        self._initialize_weights()
+    
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.zeros_(m.bias)
+    
     def forward(self, x):
-        x = self.pool(torch.relu(self.conv1(x)))   # (N, 6, 14, 14)
-        x = self.pool(torch.relu(self.conv2(x)))   # (N,16, 5, 5)
+        # Handle single channel input
+        if x.size(1) == 1:
+            x = x.repeat(1, 1, 1, 1)  # Repeat single channel
+        
+        x = self.model.features(x)
+        x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
         x = torch.flatten(x, 1)
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = self.model.classifier(x)
         return x
-
-# --- Bagian untuk pengujian ---
-if __name__ == '__main__':
-    NUM_CLASSES = 2
-    IN_CHANNELS = 1
-    
-    print("--- Menguji Model 'SimpleCNN' ---")
-    
-    model = SimpleCNN(in_channels=IN_CHANNELS, num_classes=NUM_CLASSES)
-    print("Arsitektur Model:")
-    print(model)
-    
-    dummy_input = torch.randn(64, IN_CHANNELS, 28, 28)
-    output = model(dummy_input)
-    
-    print(f"\nUkuran input: {dummy_input.shape}")
-    print(f"Ukuran output: {output.shape}")
-    print("Pengujian model 'SimpleCNN' berhasil.")
