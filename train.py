@@ -5,13 +5,16 @@ import torch.nn as nn
 import torch.optim as optim
 from datareader import get_data_loaders, NEW_CLASS_NAMES
 from model import SimpleCNN
+from resnetmodel import ResNet, BasicBlock
+from mobilenet import CustomMobileNetV2
 import matplotlib.pyplot as plt
 from utils import plot_training_history, visualize_random_val_predictions
 
 # --- Hyperparameter ---
-EPOCHS = 16
-BATCH_SIZE = 16
-LEARNING_RATE = 0.0003
+EPOCHS = 30
+BATCH_SIZE = 32
+LEARNING_RATE = 0.0001
+MODEL_TYPE = "mobilenet"  # Pilihan: "simple", "resnet", atau "mobilenet"
 
 #Menampilkan plot riwayat training dan validasi setelah training selesai.
 
@@ -20,7 +23,15 @@ def train():
     train_loader, val_loader, num_classes, in_channels = get_data_loaders(BATCH_SIZE)
     
     # 2. Inisialisasi Model
-    model = SimpleCNN(in_channels=in_channels, num_classes=num_classes)
+    if MODEL_TYPE == "resnet":
+        model = ResNet(BasicBlock, [2,2,2,2], in_channels=in_channels, num_classes=num_classes)  # ResNet18 architecture
+        print("Menggunakan arsitektur ResNet18")
+    elif MODEL_TYPE == "mobilenet":
+        model = CustomMobileNetV2(in_channels=in_channels, num_classes=num_classes)  # MobileNetV2 architecture
+        print("Menggunakan arsitektur MobileNetV2")
+    else:
+        model = SimpleCNN(in_channels=in_channels, num_classes=num_classes)  # SimpleCNN architecture
+        print("Menggunakan arsitektur SimpleCNN")
     print(model)
     
     # 3. Mendefinisikan Loss Function dan Optimizer
